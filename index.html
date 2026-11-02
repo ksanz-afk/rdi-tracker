@@ -1,0 +1,851 @@
+<title>RDI Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a working ledger over the repo. Tabs, combinable filters, one dense table, a side drawer to edit; a research view that drills idea → hypothesis → evidence → interview. */
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --sunk:#eceeea; --line:#d9ddd6; --fg:#1d2420; --muted:#5f6a63;
+  --accent:#1f6b57; --accent-soft:#e1efe9; --accent-fg:#ffffff;
+  --s-gray:#e8eae6; --s-gray-fg:#4a524d; --s-blue:#e3ecf8; --s-blue-fg:#24508f; --s-amber:#f8eed9; --s-amber-fg:#7a5410;
+  --s-green:#e0f0e6; --s-green-fg:#1e6640; --s-red:#f8e3e1; --s-red-fg:#9a2f26; --s-violet:#ece6f6; --s-violet-fg:#59408c; --s-pink:#f6e4ee; --s-pink-fg:#8c3664;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141917; --surface:#1b211e; --sunk:#111513; --line:#2c3530; --fg:#e4e9e5; --muted:#97a39b;
+  --accent:#5cbf9f; --accent-soft:#1e3a30; --accent-fg:#0d1a15;
+  --s-gray:#262d29; --s-gray-fg:#b7c0ba; --s-blue:#1d2b40; --s-blue-fg:#9fc0ef; --s-amber:#3a2e15; --s-amber-fg:#e8c27a;
+  --s-green:#173325; --s-green-fg:#8fd6ac; --s-red:#3d1d1a; --s-red-fg:#f0a39b; --s-violet:#2b2340; --s-violet-fg:#c4b1ee; --s-pink:#3a1f2e; --s-pink-fg:#eeaacb;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --surface:#1b211e; --sunk:#111513; --line:#2c3530; --fg:#e4e9e5; --muted:#97a39b;
+  --accent:#5cbf9f; --accent-soft:#1e3a30; --accent-fg:#0d1a15;
+  --s-gray:#262d29; --s-gray-fg:#b7c0ba; --s-blue:#1d2b40; --s-blue-fg:#9fc0ef; --s-amber:#3a2e15; --s-amber-fg:#e8c27a;
+  --s-green:#173325; --s-green-fg:#8fd6ac; --s-red:#3d1d1a; --s-red-fg:#f0a39b; --s-violet:#2b2340; --s-violet-fg:#c4b1ee; --s-pink:#3a1f2e; --s-pink-fg:#eeaacb;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--f-body);margin:0}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:18px 48px;display:flex;flex-direction:column;gap:14px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font:600 22px/1.1 var(--f-display);letter-spacing:.01em;margin:0}
+h1 small{font:500 12px var(--f-mono);color:var(--muted);letter-spacing:.04em;margin-left:8px;text-transform:uppercase}
+.sync{font:12px var(--f-mono);color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.sync.bad{color:var(--s-red-fg)}
+.sync b{color:var(--s-amber-fg);font-weight:500}
+.sync a{color:var(--accent)}
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{appearance:none;border:0;background:none;color:var(--muted);font:500 14px var(--f-body);padding:9px 14px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;display:flex;gap:7px;align-items:center}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+nav.tabs .n{font:12px var(--f-mono);color:var(--muted)}
+nav.tabs .sep{width:1px;background:var(--line);margin:6px 6px}
+.strip{display:flex;gap:6px;flex-wrap:wrap}
+.chip{appearance:none;border:1px solid transparent;border-radius:999px;padding:3px 10px;font:500 12px var(--f-body);cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.chip b{font:500 12px var(--f-mono)}
+.chip[aria-pressed="true"]{border-color:currentColor;box-shadow:0 0 0 1px currentColor inset}
+.tone-gray{background:var(--s-gray);color:var(--s-gray-fg)} .tone-blue{background:var(--s-blue);color:var(--s-blue-fg)}
+.tone-amber{background:var(--s-amber);color:var(--s-amber-fg)} .tone-green{background:var(--s-green);color:var(--s-green-fg)}
+.tone-red{background:var(--s-red);color:var(--s-red-fg)} .tone-violet{background:var(--s-violet);color:var(--s-violet-fg)} .tone-pink{background:var(--s-pink);color:var(--s-pink-fg)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tools input[type=search]{font:14px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;flex:1 1 220px;min-width:0}
+.btn{appearance:none;font:500 14px var(--f-body);border-radius:var(--r);padding:7px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.danger{color:var(--s-red-fg);border-color:var(--s-red-fg);background:transparent}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* custom dropdown (native selects don't open reliably in the viewer) */
+.dd{position:relative;display:inline-block;min-width:0}
+.dd>button{appearance:none;width:100%;text-align:left;font:14px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 30px 7px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
+.dd>button::after{content:"";position:absolute;right:11px;top:50%;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:translateY(-70%) rotate(45deg)}
+.dd>button.set{border-color:var(--accent);color:var(--accent)}
+.dd ul{position:absolute;z-index:30;left:0;top:calc(100% + 4px);min-width:100%;max-width:360px;max-height:300px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14)}
+ul.ddmenu{position:fixed;z-index:50;margin:0;padding:4px;list-style:none;max-width:360px;max-height:320px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14);text-transform:none;letter-spacing:0;font:400 14px var(--f-body);color:var(--fg)}
+.dd li,ul.ddmenu li{padding:6px 10px;border-radius:4px;cursor:pointer;white-space:nowrap}
+.dd li:hover,.dd li.on,ul.ddmenu li:hover,ul.ddmenu li.on{background:var(--accent-soft)}
+.dd li.cur,ul.ddmenu li.cur{font-weight:600}
+th .thl{display:inline-flex;align-items:center;gap:2px}
+.dd.hdd{display:inline-block;vertical-align:middle}
+.dd.hdd>button{width:auto;padding:1px 5px;border:1px solid transparent;background:none;color:var(--muted);font:600 11px var(--f-body);border-radius:4px;letter-spacing:0;text-transform:none;max-width:160px}
+.dd.hdd>button::after{display:none}
+.dd.hdd>button:hover{border-color:var(--line);background:var(--surface)}
+.dd.hdd>button.set{color:var(--accent-fg);background:var(--accent);border-color:var(--accent)}
+td.flagc{width:28px;text-align:center;padding-inline:4px}
+.pflag{color:var(--s-red-fg);font-size:15px;line-height:1}
+th[data-k="priority"]{width:28px;padding-inline:6px}
+.hidden-f{font-size:12.5px;color:var(--muted)}
+.drawer .dd{display:block}
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap;cursor:pointer;user-select:none}
+th[data-sort="asc"]::after{content:" ↑"} th[data-sort="desc"]::after{content:" ↓"}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;max-width:320px}
+tr:last-child td{border-bottom:0}
+tbody tr{cursor:pointer} tbody tr:hover td{background:var(--accent-soft)}
+td.title{font-weight:500;min-width:170px}
+td.mono{font:12.5px var(--f-mono);white-space:nowrap}
+td.muted{color:var(--muted)}
+td a,.res a{color:var(--accent)}
+.pill{display:inline-block;border-radius:4px;padding:1px 7px;font:500 12px var(--f-body);white-space:nowrap}
+.who{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:20px;padding:0 6px;border-radius:4px;font:500 11.5px var(--f-mono);background:var(--s-gray);color:var(--s-gray-fg)}
+.who.kat{background:var(--s-violet);color:var(--s-violet-fg)} .who.ale{background:var(--s-blue);color:var(--s-blue-fg)} .who.pope{background:var(--s-amber);color:var(--s-amber-fg)}
+.pend{display:inline-block;margin-left:6px;font:500 10.5px var(--f-mono);color:var(--s-amber-fg);background:var(--s-amber);border-radius:3px;padding:0 5px;vertical-align:1px}
+.overdue{color:var(--s-red-fg);font-weight:500}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--fg);font:600 16px var(--f-display);margin-bottom:6px}
+.foot{font:12px var(--f-mono);color:var(--muted);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+/* research view */
+.res{display:grid;gap:18px}
+.res section{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;min-width:0}
+.res h2{font:600 17px var(--f-display);margin:0 0 10px}
+.res ol.thesis{margin:0;padding-left:20px;display:grid;gap:8px;max-width:95ch}
+.res .sub{color:var(--muted);font-size:13px}
+.node{border-top:1px solid var(--line)}
+.node:first-of-type{border-top:0}
+.node>.head{display:flex;gap:10px;align-items:flex-start;padding:10px 0;cursor:pointer}
+.node>.head .tw{flex:0 0 14px;color:var(--muted);font:12px var(--f-mono);padding-top:2px}
+.node>.head .tx{flex:1;min-width:0}
+.node>.head .id{font:500 12px var(--f-mono);color:var(--muted);margin-right:6px}
+.node>.body{padding:0 0 12px 24px}
+.counts{display:inline-flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.cnt{font:500 12px var(--f-mono);border-radius:4px;padding:1px 7px;cursor:pointer;border:1px solid transparent}
+.cnt.for{background:var(--s-green);color:var(--s-green-fg)} .cnt.against{background:var(--s-red);color:var(--s-red-fg)} .cnt.both{background:var(--s-amber);color:var(--s-amber-fg)}
+.cnt[aria-pressed="true"]{border-color:currentColor}
+.ev{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
+.ev li{border-left:3px solid var(--line);padding:2px 0 2px 10px}
+.ev li.for{border-left-color:var(--s-green-fg)} .ev li.against{border-left-color:var(--s-red-fg)} .ev li.both{border-left-color:var(--s-amber-fg)}
+.ev .src{font:12px var(--f-mono);color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg button{appearance:none;border:0;background:var(--surface);color:var(--muted);font:500 13px var(--f-body);padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+/* views, links, labels */
+.views{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.vbtn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:500 13px var(--f-body);padding:5px 11px;border-radius:999px;cursor:pointer}
+.vbtn[aria-pressed="true"]{background:var(--fg);color:var(--surface);border-color:var(--fg)}
+tr.grp td{background:var(--sunk);font-weight:600;font-size:13px;cursor:default;border-top:2px solid var(--line)}
+tr.grp td .n{font:12px var(--f-mono);color:var(--muted);margin-left:4px}
+tbody tr.grp:hover td{background:var(--sunk)}
+.hlink,.clink{appearance:none;border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.hlink{font:500 12px var(--f-mono)}
+.flag{display:inline-block;margin-left:4px;font:500 10.5px var(--f-mono);border:1px solid var(--line);border-radius:3px;padding:0 5px;color:var(--muted)}
+.flag.weak{border-color:var(--s-amber-fg);color:var(--s-amber-fg)}
+.ev li.isweak{opacity:.75;border-left-style:dashed}
+/* hypotheses dashboard */
+.shead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.shead h2{margin:0}
+.cardrow{display:grid;grid-template-columns:150px repeat(auto-fit,minmax(104px,1fr));gap:8px;align-items:stretch;margin-bottom:8px}
+.cardlabel{font:600 13px var(--f-body);display:flex;flex-direction:column;justify-content:center}
+.cardlabel span{font:400 12px var(--f-body);color:var(--muted)}
+.card{appearance:none;border:1px solid transparent;border-radius:var(--r);padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;font:inherit}
+.card b{font:600 26px/1 var(--f-display)}
+.card span{font:500 12.5px var(--f-body)}
+.card[aria-pressed="true"]{border-color:currentColor;box-shadow:0 0 0 1px currentColor inset}
+@media (max-width:640px){.cardrow{grid-template-columns:repeat(2,1fr)}.cardlabel{grid-column:1/-1}}
+.hlist{display:grid}
+.hrow{border-top:1px solid var(--line)}
+.hrow:first-child{border-top:0}
+.hhead{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(160px,1fr) 92px;gap:14px;align-items:center;padding:10px 0;cursor:pointer}
+.hhead:hover .hname{color:var(--accent)}
+.hname{min-width:0}
+.hname .id{font:500 12px var(--f-mono);color:var(--muted);margin-right:6px}
+.hnum{font:500 12.5px var(--f-mono);text-align:right;display:flex;flex-direction:column;gap:2px}
+.pos{color:var(--s-green-fg);font:500 12.5px var(--f-mono)} .neg{color:var(--s-red-fg);font:500 12.5px var(--f-mono)}
+.dbar{display:grid;grid-template-columns:1fr 2px 1fr;align-items:center;height:16px}
+.dbar .side{display:flex;height:12px}
+.dbar .side.l{justify-content:flex-end}
+.dbar .axis{height:20px;background:var(--muted)}
+.seg-s.for{background:var(--s-green-fg)} .seg-w.for{background:var(--s-green)}
+.seg-s.against{background:var(--s-red-fg)} .seg-w.against{background:var(--s-red)}
+.seg-w{background-image:repeating-linear-gradient(45deg,transparent 0 3px,rgba(127,127,127,.25) 3px 5px)}
+.hbody{padding:0 0 14px 0;display:grid;gap:6px}
+.hbody p{margin:0;max-width:95ch}
+@media (max-width:720px){.hhead{grid-template-columns:1fr 70px}.hhead .dbar{grid-column:1/-1;grid-row:2}}
+.webbox{border:1px solid var(--line);border-radius:var(--r);background:var(--bg);overflow:hidden}
+svg.web{display:block;width:100%;height:auto;max-height:640px}
+svg.web .e{stroke-opacity:.55;stroke-linecap:round}
+svg.web .e.for{stroke:var(--s-green-fg)} svg.web .e.against{stroke:var(--s-red-fg)} svg.web .e.both{stroke:var(--s-amber-fg)}
+svg.web .e.weak{stroke-dasharray:4 3}
+svg.web .e.dim{stroke-opacity:.06}
+svg.web .n{cursor:pointer}
+svg.web .n.dim{opacity:.18}
+svg.web .n.h circle{stroke:var(--surface);stroke-width:2}
+svg.web .n.h circle.untested{stroke:var(--fg);stroke-dasharray:3 2;stroke-width:1.5}
+svg.web .n.h.for circle{fill:var(--s-green-fg)} svg.web .n.h.against circle{fill:var(--s-red-fg)} svg.web .n.h.mixed circle{fill:var(--s-amber-fg)} svg.web .n.h.thin circle{fill:var(--muted)}
+svg.web .n.h text{font:600 10px var(--f-mono);fill:var(--surface);text-anchor:middle;pointer-events:none}
+svg.web .n.i circle{fill:var(--surface);stroke:var(--fg);stroke-width:1.3}
+svg.web .n.i.rdi circle{fill:var(--fg)}
+svg.web .n.on circle{stroke:var(--accent);stroke-width:3}
+svg.web text.il{font:500 10px var(--f-mono);fill:var(--fg)}
+svg.web .n:focus-visible{outline:none} svg.web .n:focus-visible circle{stroke:var(--accent);stroke-width:3}
+.webcap{margin-top:8px}
+.lk{font:500 12px var(--f-mono);border-radius:3px;padding:0 5px;text-decoration:none}
+.lk.for{background:var(--s-green);color:var(--s-green-fg)} .lk.against{background:var(--s-red);color:var(--s-red-fg)} .lk.both{background:var(--s-amber);color:var(--s-amber-fg)}
+.legend .lg::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.legend .lg{border:0;padding:0}
+.lg.for::before{background:var(--s-green-fg)} .lg.mixed::before{background:var(--s-amber-fg)} .lg.against::before{background:var(--s-red-fg)} .lg.thin::before{background:var(--muted)} .lg.dash::before{border:1.5px dashed var(--fg);background:none}
+/* ideas */
+.tb{display:grid;gap:12px}
+.tbh{display:flex;gap:12px;align-items:flex-start}
+.tbh p{margin:0;max-width:95ch}
+.tn{flex:0 0 26px;height:26px;border-radius:50%;background:var(--fg);color:var(--surface);font:600 13px var(--f-display);display:flex;align-items:center;justify-content:center}
+.concept{border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px;background:var(--bg)}
+.chead{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.chead b{font:600 16px var(--f-display)}
+.letter{display:inline-flex;width:24px;height:24px;border-radius:4px;background:var(--accent);color:var(--accent-fg);font:600 13px var(--f-display);align-items:center;justify-content:center;margin-right:8px}
+.total{min-width:170px;text-align:right}
+.total b{font:600 24px var(--f-display)} .total span{font-size:12.5px;color:var(--muted);margin-left:4px}
+.tbar{position:relative;height:6px;background:var(--line);border-radius:3px;margin-top:4px}
+.tbar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:3px}
+.tbar em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg)}
+.what{margin:0;max-width:95ch}
+dl.facts{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;margin:0;font-size:13.5px}
+dl.facts dt{color:var(--muted);font-weight:500} dl.facts dd{margin:0;max-width:90ch}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.cgrid h4{font:600 13px var(--f-body);margin:4px 0 6px}
+table.rubric{width:100%;font-size:13px;border-collapse:collapse}
+table.rubric td{padding:3px 6px 3px 0;border:0;max-width:none;vertical-align:top}
+table.rubric td:first-child{white-space:nowrap}
+table.rubric tr.zero td:first-child{color:var(--s-red-fg);font-weight:600}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--line);display:inline-block}
+.dots i.on{background:var(--accent)}
+ul.rests{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:13.5px}
+.cref{font-size:13px;color:var(--muted)}
+ul.orig{font-size:13.5px;display:grid;gap:4px}
+@media (max-width:640px){dl.facts{grid-template-columns:1fr}.total{text-align:left}}
+/* insights documents */
+.md{line-height:1.55}
+.md h2{font:600 18px var(--f-display);margin:22px 0 8px}
+.md h4{font:600 14px var(--f-body);margin:14px 0 6px}
+.md p,.md li{max-width:92ch}
+.md ul,.md ol{padding-left:22px;margin:6px 0}
+.md li{margin:4px 0}
+.md code{font:12.5px var(--f-mono);background:var(--sunk);padding:0 4px;border-radius:3px}
+.mdtable{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);margin:8px 0}
+.mdtable table{min-width:760px}
+.mdtable th{cursor:default;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--fg);white-space:normal}
+.mdtable tbody th{background:var(--surface);font-weight:600;width:24%}
+.mdtable td{max-width:none}
+table.heat td{text-align:center;font-weight:600}
+.r-hi{background:var(--fg)!important;color:var(--surface)} .r-so{background:var(--line)!important;color:var(--fg)} .r-lo{color:var(--fg);font-weight:400!important} .r-th{color:var(--muted);font-style:italic;font-weight:400!important}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin:6px 0 4px}
+.legend span{padding:1px 8px;border-radius:3px;border:1px solid var(--line)}
+.flow{display:grid;gap:8px;margin:10px 0 14px;overflow-x:auto}
+.flowrow{display:grid;grid-template-columns:210px 1fr;gap:12px;align-items:center;min-width:760px}
+.flowlabel{font-size:13px;color:var(--muted)}
+.steps{display:flex;align-items:center;gap:8px}
+.step{border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:13px;white-space:nowrap;background:var(--surface)}
+.step.moved{background:var(--fg);color:var(--surface);border-color:var(--fg);font-weight:600}
+.arrow{color:var(--muted)}
+details.mdsec{border-top:1px solid var(--line);padding:8px 0}
+details.mdsec summary{cursor:pointer;font-weight:600}
+details.mdsec>div{padding:6px 0 4px 4px}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,14,12,.35);z-index:10}
+aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(500px,100%);background:var(--surface);border-left:1px solid var(--line);z-index:11;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.dhead{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dhead h2{font:600 17px var(--f-display);margin:0;min-width:0;overflow-wrap:anywhere}
+.dbody{flex:1;overflow:auto;padding:16px 18px;display:grid;gap:12px;align-content:start}
+.field{display:grid;gap:4px}
+.field label{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.field input{font:14px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;width:100%;min-width:0}
+.field .ro{font:13px var(--f-mono);color:var(--muted);overflow-wrap:anywhere}
+.field .linkout{font-size:12.5px;color:var(--accent);overflow-wrap:anywhere}
+.note{font-size:12.5px;color:var(--muted);background:var(--sunk);border-radius:var(--r);padding:8px 10px}
+.dfoot{display:flex;gap:8px;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid var(--line);flex-wrap:wrap}
+.dfoot .r{display:flex;gap:8px}
+.confirm{font-size:13px;color:var(--s-red-fg);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:var(--r);font-size:13px;z-index:40}
+.banner.signin{background:var(--surface);color:var(--fg);border-color:var(--line);font-size:14px;padding:14px 16px;display:grid;gap:6px}
+.banner.signin p,.banner.signin ol{margin:0}.banner.signin ol{padding-left:20px}
+.banner.signin .why{color:var(--s-red-fg)}
+.banner.signin a{color:var(--accent)}
+.tokrow{display:flex;gap:8px;flex-wrap:wrap}.tokrow input{flex:1 1 260px;min-width:0;font:14px var(--f-mono);padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--fg)}
+.banner{border:1px solid var(--s-amber-fg);background:var(--s-amber);color:var(--s-amber-fg);border-radius:var(--r);padding:9px 12px;font-size:13px}
+@media (prefers-reduced-motion:no-preference){aside.drawer{animation:slide .16s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>RDI Tracker</h1>
+    <span class="sync" id="sync">Connecting…</span>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <div id="ledgerView">
+    <div class="strip" id="strip" style="margin-bottom:10px"></div>
+    <div class="tools" id="tools" style="margin-bottom:12px"></div>
+    <div class="tablebox"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table><div class="empty" id="empty" hidden></div></div>
+    <div class="foot" style="margin-top:10px"><span id="count"></span><span id="srcfile"></span></div>
+  </div>
+  <div id="resView" class="res" hidden></div>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Edit row"></aside>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const PEOPLE=["kat","ale","pope"];
+const SEGMENTS=["01 · Product leaders & PMs","02 · In-house research & insights","03 · Product & service design","04 · CPG innovation & insights","05 · Data & analytics & growth","06 · CTO & AI platform leads","07 · AI-native founders & builders","08 · Research agencies & panels","09 · AI & HC-LLM academics","10 · Decision-science experts","11 · Startups & vendors","12 · Gatekeepers: legal & procurement & partnerships","13 · Investors & ecosystem"];
+const CLUSTERS=["AI-moderated interviews","Synthetic respondents / simulation","Feedback intelligence / VoC-to-roadmap","Research repositories","LatAm panels / DIY research / CX","Point solutions","PM systems of record","Product analytics & experimentation","Enterprise context layers","Decision intelligence (operations)","Product-decision startups"];
+// Field types per CSV column. Columns come from the repo file; anything unlisted is plain text.
+const F={
+  crm:{title:"name",status:"status",filters:["segment","owner","network","channel","round","tags","tests"],
+    cols:["priority","name","company","role","segment","status","owner","channel","round","interview_date","follow_up"],
+    types:{priority:["Yes"],status:["To contact","Backlog","Contacted","Followed up","Scheduled","Interviewed","Declined"],segment:SEGMENTS,owner:PEOPLE,network:["Warm network","Stanford community","Cold outreach"],channel:["Email","LinkedIn","WhatsApp","Intro"],round:["Round 1","Round 2","Round 3","Round 4"],interview_date:"date",profile:"url",prep_brief:"url",transcript:"url",notion_url:"ro",tags:"tags"},
+    tones:{"To contact":"blue","Backlog":"gray","Contacted":"violet","Followed up":"pink","Scheduled":"amber","Interviewed":"green","Declined":"red"},
+    label:"CRM",sort:["status","asc"]},
+  tasks:{title:"task",status:"status",filters:["owner"],cols:["task","status","owner","due","link"],
+    types:{status:["Not started","In progress","Done"],owner:PEOPLE,due:"date",link:"url",created:"ro",notion_url:"ro"},
+    tones:{"Not started":"gray","In progress":"blue","Done":"green"},label:"Tasks",sort:["due","asc"],hideDone:true},
+  startups:{title:"company",status:"cluster",filters:["layer","geography","stage"],cols:["company","cluster","layer","geography","stage","website","last_checked"],
+    types:{cluster:CLUSTERS,layer:["Evidence","System of record","Context layer","Operational decision","Product decision"],category:["Research","Experience management","Analytics","Experimentation","Product planning","Other"],geography:["US","LatAm","Europe","Global"],stage:["Pre-seed","Seed","Series A","Series B+","Public","Acquired"],website:"url",note:"url",last_checked:"date",notion_url:"ro"},
+    tones:{},label:"Startups",sort:["company","asc"]},
+  conferences:{title:"event",status:"status",filters:[],cols:["event","status","start","location","going","link"],
+    types:{status:["Considering","Registered","Attended","Skipped"],start:"date",end:"date",link:"url",notion_url:"ro"},
+    tones:{"Considering":"gray","Registered":"blue","Attended":"green","Skipped":"red"},label:"Conferences",sort:["start","asc"]}
+};
+const LEDGERS=["crm","tasks","startups","conferences"];
+// Saved views: shared presets, like Notion's views. Picking one sets filters and grouping.
+const VIEWS={
+  crm:[{id:"week",l:"This week: To contact",f:{},st:"To contact"},{id:"all",l:"All contacts"},{id:"seg",l:"By segment",group:"segment"},{id:"pipe",l:"Pipeline, by status",group:"status"},{id:"li",l:"LinkedIn Network",f:{tags:"LinkedIn Network"},group:"segment"},{id:"r1",l:"Round 1, by hypothesis",f:{round:"Round 1"},group:"tests"},{id:"r2",l:"Round 2, by hypothesis",f:{round:"Round 2"},group:"tests"},{id:"kat",l:"Kat's",f:{owner:"kat"},group:"status"},{id:"ale",l:"Ale's",f:{owner:"ale"},group:"status"}],
+  tasks:[{id:"open",l:"Open tasks"},{id:"own",l:"By owner",group:"owner"},{id:"kat",l:"Kat's",f:{owner:"kat"}},{id:"ale",l:"Ale's",f:{owner:"ale"}}],
+  startups:[{id:"all",l:"All"},{id:"cl",l:"By cluster",group:"cluster"},{id:"latam",l:"LatAm",f:{geography:"LatAm"},group:"cluster"}],
+  conferences:[]
+};
+const listOf=(v)=>(v||"").split(",").map(x=>x.trim()).filter(Boolean);
+const RES=["insights","interviews"];
+const S={tab:"crm",snap:{},meta:null,edits:[],loaded:false,q:"",f:{},statusF:"",showDone:false,sort:{},view:{},group:{},editing:null,db:null,user:null,uid:null,canWrite:true,res:{insight:"dash",open:{},ev:{},filter:"",sortBy:"net",sel:""}};
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function recall(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2400)}
+
+/* ---------- data: snapshot from the repo + pending edits from the app ---------- */
+function snapRows(col){const parts=Object.keys(S.snap).filter(k=>S.snap[k].col===col).sort((a,b)=>(+a.split("-").pop())-(+b.split("-").pop()));return parts.flatMap(k=>S.snap[k].rows||[])}
+function snapInfo(col){const k=Object.keys(S.snap).find(k=>S.snap[k].col===col);return k?S.snap[k]:{}}
+function columns(col){return snapInfo(col).columns||F[col].cols}
+let cache={};
+function rebuild(){
+  cache={};
+  for(const col of LEDGERS){
+    const rows=snapRows(col).map(r=>({...r,_pending:0}));const by={};rows.forEach(r=>by[r._key]=r);
+    for(const e of S.edits.filter(e=>e.col===col)){
+      if(e.op==="new"){if(!by[e.key]){const r={...e.fields,_key:e.key,_pending:1,_new:true};rows.push(r);by[e.key]=r}else{Object.assign(by[e.key],e.fields);by[e.key]._pending++}}
+      else if(by[e.key]){if(e.op==="delete"){by[e.key]._deleted=true;by[e.key]._pending++}else{Object.assign(by[e.key],e.fields);by[e.key]._pending++}}
+    }
+    cache[col]=rows.filter(r=>!r._deleted);
+  }
+  const ev=snapRows("evidence"),iv={};snapRows("interviews").forEach(i=>iv[i.id]=i);
+  const hyp={};snapRows("hypotheses").forEach(h=>hyp[h.id]={...h,ev:{for:[],against:[],both:[]}});
+  for(const e of ev)for(const l of e.links||[]){if(hyp[l.h])hyp[l.h].ev[l.s].push(e)}
+  cache.hyp=hyp;cache.iv=iv;cache.ev=ev;cache.ideas=snapRows("ideas");cache.thesis=snapRows("thesis")[0];cache.insights=snapRows("insights");cache.concepts=snapRows("concepts");
+}
+const rows=(col)=>cache[col]||[];
+function interviewsOf(list){return new Set(list.map(e=>e.i)).size}
+
+/* ---------- dropdown ---------- */
+let ddOpen=null;
+function dd(id,value,options,placeholder,{set=false}={}){
+  const cur=options.find(o=>o.v===value);const label=cur?cur.l:placeholder;
+  return `<div class="dd" data-dd="${esc(id)}"><button type="button" aria-haspopup="listbox" aria-expanded="false" class="${set?"set":""}">${esc(label)}</button></div>`;
+}
+const DD={};// id -> {options,value,onPick}
+function registerDD(id,options,value,onPick){DD[id]={options,value,onPick}}
+function openDD(el){
+  closeDD();const id=el.dataset.dd,conf=DD[id];if(!conf)return;
+  const ul=document.createElement("ul");ul.setAttribute("role","listbox");
+  ul.innerHTML=conf.options.map((o,i)=>`<li role="option" data-i="${i}" class="${o.v===conf.value?"cur":""}">${esc(o.l)}</li>`).join("");
+  if(el.classList.contains("hdd")){const b=el.getBoundingClientRect();ul.className="ddmenu";ul.style.left=Math.max(8,Math.min(b.left,window.innerWidth-260))+"px";ul.style.top=(b.bottom+4)+"px";document.body.appendChild(ul)}
+  else el.appendChild(ul);
+  el.querySelector("button").setAttribute("aria-expanded","true");ddOpen={el,ul,conf,hi:-1};
+}
+function closeDD(){if(!ddOpen)return;ddOpen.ul.remove();ddOpen.el.querySelector("button").setAttribute("aria-expanded","false");ddOpen=null}
+function pickDD(i){const {el,conf}=ddOpen;const o=conf.options[i];closeDD();conf.value=o.v;if(!el.classList.contains("hdd"))el.querySelector("button").textContent=o.l;conf.onPick(o.v)}
+
+/* ---------- ledger view ---------- */
+function opts(col,k){const t=F[col].types[k];if(Array.isArray(t))return t;if(k==="tests"){const s=new Set();rows(col).forEach(r=>listOf(r.tests).forEach(x=>s.add(x)));return [...s].sort()}if(k==="tags"){const s=new Set();rows(col).forEach(r=>(r.tags||"").split(",").map(x=>x.trim()).filter(Boolean).forEach(x=>s.add(x)));return [...s].sort()}
+  return [...new Set(rows(col).map(r=>r[k]).filter(Boolean))].sort()}
+function pretty(k){return k.replace(/_/g," ").replace(/^\w/,c=>c.toUpperCase())}
+function match(col,r,k,v){if(!v)return true;if(v==="-")return !r[k];if(k==="tags"||k==="tests")return listOf(r[k]).includes(v);return r[k]===v}
+function filtered(col,skipStatus){
+  const C=F[col],f=S.f[col]||{};let rs=rows(col).filter(r=>Object.keys(f).every(k=>match(col,r,k,f[k])));
+  if(!skipStatus){if(S.statusF)rs=rs.filter(r=>(r[C.status]||"")===S.statusF);else if(C.hideDone&&!S.showDone)rs=rs.filter(r=>r.status!=="Done")}
+  if(S.q){const q=S.q.toLowerCase();rs=rs.filter(r=>Object.keys(r).some(k=>!k.startsWith("_")&&String(r[k]??"").toLowerCase().includes(q)))}
+  return rs;
+}
+function sorted(col,rs){const C=F[col];const [sk,sd]=S.sort[col]||C.sort;const t=C.types[sk];
+  const rank=r=>{const v=r[sk]||"";if(Array.isArray(t))return v?t.indexOf(v):999;return v.toLowerCase()};
+  return [...rs].sort((a,b)=>{const x=rank(a),y=rank(b),ex=x===""||x===999,ey=y===""||y===999;if(ex!==ey)return ex?1:-1;return (x<y?-1:x>y?1:0)*(sd==="desc"?-1:1)})}
+function tone(col,v){const C=F[col];if(col==="startups"){const i=CLUSTERS.indexOf(v);return ["blue","violet","pink","gray","green","gray","amber","amber","violet","red","red"][i]||"gray"}return C.tones[v]||"gray"}
+function shortUrl(u){try{const x=new URL(u);if(x.hostname.includes("github.com")){const m=x.pathname.match(/\/pull\/(\d+)/);if(m)return "PR #"+m[1];return decodeURIComponent(x.pathname.split("/").pop())}if(x.hostname.includes("linkedin.com"))return "linkedin";return x.hostname.replace(/^www\./,"")}catch(e){return u}}
+function cell(col,k,r){const C=F[col],t=C.types[k],v=r[k];
+  if(k===C.title)return `<td class="title">${esc(v)||'<span class="muted">Untitled</span>'}${r._pending?`<span class="pend" title="Saved here, not yet synced to the repo">pending</span>`:""}</td>`;
+  if(k===C.status)return `<td>${v?`<span class="pill tone-${tone(col,v)}">${esc(v)}</span>`:""}</td>`;
+  if(k==="priority")return `<td class="flagc">${v?`<span class="pflag" title="Priority" aria-label="Priority">⚑</span>`:""}</td>`;
+  if(k==="owner")return `<td>${v?`<span class="who ${esc(v)}">${esc(v)}</span>`:""}</td>`;
+  if(t==="url")return `<td class="mono">${v?`<a href="${esc(v)}" target="_blank" rel="noopener" data-stop>${esc(shortUrl(v))}</a>`:""}</td>`;
+  if(t==="date"){const od=k==="due"&&v&&v<today()&&r.status!=="Done";return `<td class="mono ${od?"overdue":""}">${esc(v)}</td>`}
+  return `<td class="${["company","role"].includes(k)?"":"muted"}">${esc(v)}</td>`}
+function applyView(col,id){const v=(VIEWS[col]||[]).find(x=>x.id===id);if(!v)return;S.view[col]=id;S.f[col]={...(v.f||{})};S.group[col]=v.group||"";S.statusF=v.st||"";S.q="";store("f",S.f);store("view",S.view);store("group",S.group)}
+function renderLedger(){
+  const col=S.tab,C=F[col],f=S.f[col]||(S.f[col]={});
+  const base=filtered(col,true),counts={};base.forEach(r=>{const v=r[C.status]||"";counts[v]=(counts[v]||0)+1});
+  const sopts=Array.isArray(C.types[C.status])?C.types[C.status]:Object.keys(counts).sort();
+  $("strip").innerHTML=sopts.filter(o=>counts[o]||col==="crm").map(o=>`<button class="chip tone-${tone(col,o)}" aria-pressed="${S.statusF===o}" data-status="${esc(o)}">${esc(o)} <b>${counts[o]||0}</b></button>`).join("")+(C.hideDone?`<button class="chip tone-gray" aria-pressed="${S.showDone}" id="toggleDone">${S.showDone?"Hide done":"Show done"}</button>`:"");
+  let tools=`<input type="search" id="q" placeholder="Search ${esc(C.label)}" aria-label="Search" value="${esc(S.q)}">`;
+  // filters on columns that aren't shown (set by a saved view) are named here
+  const hiddenF=Object.keys(f).filter(k=>f[k]&&!C.cols.includes(k));
+  if(hiddenF.length)tools+=`<span class="hidden-f">Also filtered: ${hiddenF.map(k=>esc(pretty(k))+" = "+esc(f[k]==="-"?"(empty)":f[k])).join(", ")}</span>`;
+  const active=Object.keys(f).some(k=>f[k])||S.statusF||S.q;
+  tools+=(active?`<button class="btn small" id="clear">Clear filters</button>`:"")+`<button class="btn primary" id="add" ${S.canWrite===false||!S.login?"disabled":""}>Add row</button>`;
+  $("tools").innerHTML=tools;
+  const q=$("q");q.addEventListener("input",e=>{S.q=e.target.value;const pos=e.target.selectionStart;renderTable();});
+  renderTable();
+}
+// Column-header filters: a menu of the column's values. Status uses the status chips' filter.
+function filterable(col,k){const C=F[col],t=C.types[k];return k!==C.title&&t!=="url"&&t!=="date"&&t!=="ro"&&!["follow_up","role","note","going"].includes(k)}
+function headFilter(col,k){
+  if(!filterable(col,k))return "";
+  const C=F[col],f=S.f[col]||(S.f[col]={}),isS=k===C.status,cur=isS?S.statusF:(f[k]||"");
+  const vals=k==="tests"||k==="tags"?opts(col,k):[...new Set([...(Array.isArray(C.types[k])?C.types[k]:[]),...rows(col).map(r=>r[k]).filter(Boolean)])];
+  if(!Array.isArray(C.types[k]))vals.sort((a,b)=>a.localeCompare(b));
+  const options=k==="priority"?[{v:"",l:"All"},{v:"Yes",l:"Flagged"},{v:"-",l:"Not flagged"}]:[{v:"",l:"All"},...vals.map(x=>({v:x,l:k==="owner"?x[0].toUpperCase()+x.slice(1):x})),...(isS?[]:[{v:"-",l:"(empty)"}])];
+  const id="h-"+col+"-"+k;
+  registerDD(id,options,cur,(v)=>{if(isS)S.statusF=v;else f[k]=v;S.view[col]="";store("f",S.f);renderLedger()});
+  const label=cur?(k==="priority"?(cur==="Yes"?"Flagged":"Not flagged"):cur==="-"?"(empty)":cur):"▾";
+  return `<div class="dd hdd" data-dd="${esc(id)}"><button type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter ${esc(pretty(k))}" title="Filter by ${esc(pretty(k).toLowerCase())}" class="${cur?"set":""}">${esc(label)}</button></div>`}
+function groupOpts(col){const C=F[col];const ks=col==="crm"?["segment","status","owner","network","channel","round","tests"]:col==="tasks"?["owner","status"]:col==="startups"?["cluster","layer","geography","stage"]:["status"];return [{v:"",l:"No grouping"},...ks.map(k=>({v:k,l:k==="tests"?"Hypothesis tested":pretty(k)}))]}
+function groupKeys(col,k,r){return (k==="tests"||k==="tags")?(listOf(r[k]).length?listOf(r[k]):["(none)"]):[r[k]||"(none)"]}
+function renderTable(){
+  const col=S.tab,C=F[col],[sk,sd]=S.sort[col]||C.sort,g=S.group[col]||"";
+  $("thead").innerHTML="<tr>"+C.cols.map(k=>`<th data-k="${k}" ${k===sk?`data-sort="${sd}"`:""}><span class="thl">${k==="priority"?'<span title="Priority">⚑</span>':esc(pretty(k))}${headFilter(col,k)}</span></th>`).join("")+"</tr>";
+  const rs=sorted(col,filtered(col));
+  const rowHtml=r=>`<tr data-key="${esc(r._key)}">${C.cols.map(k=>cell(col,k,r)).join("")}</tr>`;
+  if(g){const groups={};rs.forEach(r=>groupKeys(col,g,r).forEach(k=>(groups[k]=groups[k]||[]).push(r)));
+    const order=Array.isArray(C.types[g])?C.types[g]:[];
+    const keys=Object.keys(groups).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);if(a==="(none)")return 1;if(b==="(none)")return -1;if(ia>=0||ib>=0)return (ia<0?999:ia)-(ib<0?999:ib);return a.localeCompare(b)});
+    const label=(k)=>{if(g==="tests"&&cache.hyp[k])return `${k} · ${cache.hyp[k].title}`;return k};
+    $("tbody").innerHTML=keys.map(k=>`<tr class="grp"><td colspan="${C.cols.length}">${g==="tests"&&cache.hyp[k]?`<button class="hlink" data-goh="${esc(k)}">${esc(k)}</button> `:""}${esc(g==="tests"&&cache.hyp[k]?cache.hyp[k].title:label(k))} <span class="n">${groups[k].length}</span></td></tr>`+groups[k].map(rowHtml).join("")).join("");
+  }else $("tbody").innerHTML=rs.map(rowHtml).join("");
+  const e=$("empty"),all=rows(col).length;
+  if(!S.loaded){e.hidden=false;e.innerHTML=`<strong>Loading ${esc(C.label)}…</strong>Rows appear as soon as the shared ledger answers.`}
+  else if(!all){e.hidden=false;e.innerHTML=`<strong>No ${esc(C.label.toLowerCase())} yet</strong>Use “Add row”. It goes to the repo on the next sync.`}
+  else if(!rs.length){e.hidden=false;e.innerHTML=`<strong>Nothing matches</strong>Clear the search or filters to see all ${all} rows.`}
+  else e.hidden=true;
+  $("count").textContent=`${rs.length} of ${all} ${C.label.toLowerCase()}`;
+  const fi=snapInfo(col).file;$("srcfile").innerHTML=fi?`Source: <a href="${esc(fi)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(fi.split("/blob/main/")[1])}</a>`:"";
+}
+
+/* ---------- research view ---------- */
+const HS={untested:"gray",assumed:"gray",testing:"blue",supported:"green",weakened:"amber",killed:"red",parked:"gray"};
+const LEAN={for:{l:"Leaning supported",t:"green"},mixed:{l:"Contested",t:"amber"},against:{l:"Leaning against",t:"red"},thin:{l:"Too little evidence",t:"gray"}};
+const WEAKF=["reaction to our pitch","leading question","secondhand","AI notes only","hypothetical"];
+// Evidence strength, computed (not a status): weak rows count half, "both ways" rows count zero.
+function stats(h){
+  const e=h.ev,w=(l)=>l.reduce((n,x)=>n+(x.weak?0.5:1),0);
+  const f=w(e.for),a=w(e.against),tot=f+a,net=f-a,ivF=interviewsOf(e.for),ivA=interviewsOf(e.against);
+  let lean="thin";
+  if(tot>=4&&ivF+ivA>=2){lean=net/tot>=0.4&&ivF>=2?"for":net/tot<=-0.2?"against":"mixed"}
+  return {f,a,tot,net,lean,ivF,ivA,
+    fs:e.for.filter(x=>!x.weak).length,fw:e.for.filter(x=>x.weak).length,
+    as:e.against.filter(x=>!x.weak).length,aw:e.against.filter(x=>x.weak).length,both:e.both.length}}
+function flagChips(e){return (e.flags||[]).map(f=>`<span class="flag${WEAKF.includes(f)?" weak":""}">${esc(f)}</span>`).join("")}
+function evList(h,s){const list=h.ev[s];if(!list.length)return `<p class="sub">No evidence ${s==="both"?"both ways":s} yet.</p>`;
+  const by={};list.forEach(e=>(by[e.i]=by[e.i]||[]).push(e));
+  return `<ul class="ev">${Object.keys(by).sort().map(i=>{const iv=cache.iv[i]||{};return by[i].map(e=>`<li class="${s}${e.weak?" isweak":""}"><div class="src">${esc(e.id)} · ${iv.file?`<a href="${esc(iv.file)}" target="_blank" rel="noopener">${esc(iv.title||i)}</a>`:esc(i)}${iv.date?" · "+esc(iv.date):""} ${e.type==="fact"?'<span class="flag">fact</span>':""}${flagChips(e)}</div>${esc(e.claim)}</li>`).join("")}).join("")}</ul>`}
+function conceptsFor(hid){return (cache.concepts||[]).filter(c=>(c.rests_on||[]).includes(hid))}
+function hlinks(text){const H=cache.hyp;return esc(text).replace(/H-\d{3}/g,m=>H[m]?`<button class="hlink" data-goh="${m}" title="${esc(H[m].title)}">${m}</button>`:m)}
+
+/* dashboard */
+function statusCards(H){
+  const hs=Object.values(H),by=(k)=>hs.filter(h=>h.status===k).length;
+  const cards=[["supported","Supported",by("supported")],["testing","Testing",by("testing")],["untested","Untested",by("untested")+by("assumed")],["weakened","Weakened",by("weakened")],["killed","Disproven",by("killed")],["parked","Parked",by("parked")]];
+  const leans=["for","mixed","against","thin"].map(k=>[k,LEAN[k].l,hs.filter(h=>stats(h).lean===k).length]);
+  const f=S.res.filter||"";
+  const card=(kind,[k,l,n],tone)=>`<button class="card tone-${tone}" data-filt="${kind}:${k}" aria-pressed="${f===kind+":"+k}"><b>${n}</b><span>${esc(l)}</span></button>`;
+  return `<div class="cardrow"><div class="cardlabel">Status<span>set by the team</span></div>${cards.map(c=>card("s",c,HS[c[0]]||"gray")).join("")}</div>
+  <div class="cardrow"><div class="cardlabel">What the evidence says<span>computed from evidence rows</span></div>${leans.map(c=>card("l",c,LEAN[c[0]].t)).join("")}</div>`}
+function bar(st,max){
+  const px=(n)=>max?(n/max*100).toFixed(1):0;
+  return `<div class="dbar" title="For: ${st.fs} rows + ${st.fw} weak · Against: ${st.as} rows + ${st.aw} weak · Both ways: ${st.both}">
+    <div class="side l"><span class="seg-w against" style="width:${px(st.aw)}%"></span><span class="seg-s against" style="width:${px(st.as)}%"></span></div>
+    <div class="axis"></div>
+    <div class="side r"><span class="seg-s for" style="width:${px(st.fs)}%"></span><span class="seg-w for" style="width:${px(st.fw)}%"></span></div></div>`}
+function hypRow(h,max){
+  const st=stats(h),key="d:"+h.id,open=S.res.open[key],s=S.res.ev[h.id];
+  const cs=conceptsFor(h.id);
+  return `<div class="hrow${open?" open":""}" id="hyp-d-${esc(h.id)}">
+    <div class="hhead" data-open="${esc(key)}">
+      <div class="hname"><span class="id">${esc(h.id)}</span>${esc(h.title)}
+        <div class="counts"><span class="pill tone-${HS[h.status]||"gray"}">${esc(h.status)}</span><span class="pill tone-${LEAN[st.lean].t}">${LEAN[st.lean].l}</span></div></div>
+      ${bar(st,max)}
+      <div class="hnum"><span class="neg">−${st.as+st.aw}</span> <span class="pos">+${st.fs+st.fw}</span><span class="sub">${new Set([...h.ev.for,...h.ev.against,...h.ev.both].map(e=>e.i)).size} int.</span></div>
+    </div>
+    ${open?`<div class="hbody"><p class="sub">${esc(h.statement)}</p>${h.so_what?`<p class="sub"><b>So what:</b> ${esc(h.so_what)}</p>`:""}
+      ${cs.length?`<p class="sub"><b>Ideas that rest on it:</b> ${cs.map(c=>`<button class="clink" data-goi="${esc(c.id)}">${esc(c.id)}. ${esc(c.title)}</button>`).join(" · ")}</p>`:""}
+      <div class="counts">${["for","against","both"].map(k=>`<button class="cnt ${k}" data-evs="${esc(h.id)}|${k}" aria-pressed="${s===k}">${k==="for"?"+ For":k==="against"?"− Against":"± Both ways"} ${h.ev[k].length}${h.ev[k].filter(x=>x.weak).length?` <span style="opacity:.7">(${h.ev[k].filter(x=>x.weak).length} weak)</span>`:""}</button>`).join("")}
+      <a class="sub" href="${esc(h.file)}" target="_blank" rel="noopener" style="margin-left:6px">hypothesis file ↗</a></div>
+      ${s?evList(h,s):""}</div>`:""}
+  </div>`}
+function strengthList(H){
+  const f=S.res.filter||"",[kind,val]=f.split(":");
+  let hs=Object.values(H);
+  if(kind==="s")hs=hs.filter(h=>val==="untested"?["untested","assumed"].includes(h.status):h.status===val);
+  if(kind==="l")hs=hs.filter(h=>stats(h).lean===val);
+  const mode=S.res.sortBy||"net";
+  const key=(h)=>{const st=stats(h);return mode==="net"?[-st.net,-st.tot]:mode==="volume"?[-st.tot,-st.net]:[h.id]};
+  hs.sort((a,b)=>{const x=key(a),y=key(b);for(let i=0;i<x.length;i++){if(x[i]<y[i])return -1;if(x[i]>y[i])return 1}return 0});
+  const max=Math.max(1,...Object.values(H).map(h=>{const st=stats(h);return Math.max(st.fs+st.fw,st.as+st.aw)}));
+  const seg=`<div class="seg"><button data-sortby="net" aria-pressed="${mode==="net"}">Most supported first</button><button data-sortby="volume" aria-pressed="${mode==="volume"}">Most evidence first</button></div>`;
+  return `<section><div class="shead"><h2>Hypotheses by strength of evidence</h2>${seg}</div>
+    <p class="sub">Each bar is the evidence against (left, red) and for (right, green). Lighter segments are weak evidence: a reaction to our pitch, a leading question, secondhand or a hypothetical. These count half when we rank. ${f?`Showing ${hs.length} · <button class="clink" data-filt="">show all</button>`:"Click a hypothesis to see its evidence."}</p>
+    <div class="hlist">${hs.map(h=>hypRow(h,max)).join("")||`<p class="sub">None.</p>`}</div></section>`}
+
+/* evidence web: hypotheses linked to the interviews whose evidence bears on them */
+let LAYOUT=null;
+function webData(){
+  const H=cache.hyp,links={};
+  for(const h of Object.values(H))for(const s of ["for","against","both"])for(const e of h.ev[s]){const k=h.id+"|"+e.i;(links[k]=links[k]||{h:h.id,i:e.i,for:0,against:0,both:0,weak:0,n:0});links[k][s]++;links[k].n++;if(e.weak)links[k].weak++}
+  const L=Object.values(links);const used=new Set(L.map(l=>l.i));
+  const nodes=[...Object.values(H).map(h=>({id:h.id,kind:"h",tot:stats(h).tot})),...[...used].map(i=>({id:i,kind:"i",rdi:!i.startsWith("PX")}))];
+  return {nodes,links:L}}
+function layout(){
+  const sig=(cache.ev||[]).length+":"+Object.keys(cache.hyp||{}).length;
+  if(LAYOUT&&LAYOUT.sig===sig)return LAYOUT;
+  const {nodes:all,links}=webData(),W=960,Hh=600;
+  const hr=(n)=>n.kind==="h"?9+Math.sqrt(n.tot||0)*2.2:4.5;
+  all.forEach(n=>n.r=hr(n));
+  // hypotheses with no evidence yet sit in a row along the bottom, outside the web
+  const linked=new Set(links.flatMap(l=>[l.h,l.i])),nodes=all.filter(n=>linked.has(n.id)),loose=all.filter(n=>!linked.has(n.id));
+  if(window.d3&&d3.forceSimulation){
+    const sim=d3.forceSimulation(nodes).force("link",d3.forceLink(links.map(l=>({source:l.h,target:l.i,n:l.n}))).id(d=>d.id).distance(l=>70).strength(l=>0.08+Math.min(0.5,l.n*0.04)))
+      .force("charge",d3.forceManyBody().strength(d=>d.kind==="h"?-260:-40)).force("collide",d3.forceCollide(d=>d.r+(d.kind==="h"?14:3))).force("x",d3.forceX(0).strength(0.02)).force("y",d3.forceY(0).strength(0.14)).stop();
+    for(let i=0;i<400;i++)sim.tick();
+  }else{// fallback: hypotheses on an inner ring, interviews on an outer ring
+    const hs=nodes.filter(n=>n.kind==="h"),is=nodes.filter(n=>n.kind==="i");
+    hs.forEach((n,k)=>{const a=k/hs.length*2*Math.PI;n.x=Math.cos(a)*170;n.y=Math.sin(a)*170});
+    is.forEach((n,k)=>{const a=k/is.length*2*Math.PI;n.x=Math.cos(a)*300;n.y=Math.sin(a)*270});
+  }
+  const xs=nodes.map(n=>n.x),ys=nodes.map(n=>n.y),pad=36,bottom=loose.length?56:0,ih=Hh-2*pad-bottom;
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const k=Math.min((W-2*pad)/((x1-x0)||1),ih/((y1-y0)||1));
+  nodes.forEach(n=>{n.x=pad+(n.x-x0)*k+((W-2*pad)-(x1-x0)*k)/2;n.y=pad+(n.y-y0)*k+(ih-(y1-y0)*k)/2});
+  loose.forEach((n,i)=>{n.x=pad+150+i*32;n.y=Hh-pad+4});
+  const pos={};all.forEach(n=>pos[n.id]=n);
+  LAYOUT={sig,W,H:Hh,nodes:all,links,pos,loose:loose.length?{x:pad,y:Hh-pad+8}:null};return LAYOUT}
+function web(){
+  if(!Object.keys(cache.hyp||{}).length)return "";
+  const L=layout(),sel=S.res.sel||"",H=cache.hyp;
+  const near=new Set();if(sel){near.add(sel);L.links.forEach(l=>{if(l.h===sel)near.add(l.i);if(l.i===sel)near.add(l.h)})}
+  const dir=(l)=>l.for>l.against?"for":l.against>l.for?"against":"both";
+  const edges=L.links.map(l=>{const a=L.pos[l.h],b=L.pos[l.i],on=!sel||l.h===sel||l.i===sel;
+    return `<line class="e ${dir(l)}${l.weak===l.n?" weak":""}${on?"":" dim"}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke-width="${(0.8+Math.min(5,l.n*0.7)).toFixed(1)}"><title>${esc(l.h)} ↔ ${esc(l.i)}: +${l.for} −${l.against}${l.both?" ±"+l.both:""}${l.weak?` (${l.weak} weak)`:""}</title></line>`}).join("");
+  const nodes=L.nodes.map(n=>{const dim=sel&&!near.has(n.id)?" dim":"",on=n.id===sel?" on":"";
+    if(n.kind==="h"){const h=H[n.id],st=stats(h);return `<g class="n h ${st.lean}${dim}${on}" data-sel="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.id+": "+h.title)}"><circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r.toFixed(1)}" class="${["untested","assumed"].includes(h.status)?"untested":""}"/><text x="${n.x.toFixed(1)}" y="${(n.y+3.5).toFixed(1)}">${esc(n.id.replace("H-",""))}</text><title>${esc(n.id)}: ${esc(h.title)} (+${st.fs+st.fw} −${st.as+st.aw})</title></g>`}
+    const iv=cache.iv[n.id]||{};return `<g class="n i${n.rdi?" rdi":""}${dim}${on}" data-sel="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(n.id)}"><circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r}"/>${sel&&near.has(n.id)?`<text class="il" x="${(n.x+7).toFixed(1)}" y="${(n.y+3).toFixed(1)}">${esc(n.id)}</text>`:""}<title>${esc(n.id)}: ${esc(iv.title||"")}</title></g>`}).join("");
+  let cap=`Click a hypothesis or an interview to trace its links.`;
+  if(sel&&H[sel]){const h=H[sel],st=stats(h),ls=L.links.filter(l=>l.h===sel).sort((a,b)=>b.n-a.n);
+    cap=`<b>${esc(sel)}</b> ${esc(h.title)} · <span class="pill tone-${LEAN[st.lean].t}">${LEAN[st.lean].l}</span> · ${ls.length} interviews: ${ls.map(l=>`<span class="lk ${dir(l)}">${esc(l.i)} +${l.for}/−${l.against}</span>`).join(" ")} · <button class="clink" data-goh="${esc(sel)}">evidence</button>`}
+  else if(sel){const iv=cache.iv[sel]||{},ls=L.links.filter(l=>l.i===sel).sort((a,b)=>b.n-a.n);
+    cap=`<b>${esc(sel)}</b> ${esc(iv.title||"")} · bears on ${ls.length} hypotheses: ${ls.map(l=>`<button class="lk ${dir(l)} clink" data-sel="${esc(l.h)}">${esc(l.h)} +${l.for}/−${l.against}</button>`).join(" ")}${iv.file?` · <a href="${esc(iv.file)}" target="_blank" rel="noopener">processed note ↗</a>`:""}`}
+  return `<section><div class="shead"><h2>Evidence web</h2>${sel?`<button class="btn small" data-sel="">Clear</button>`:""}</div>
+    <p class="sub">Big circles are hypotheses, sized by how much evidence they have and colored by which way it leans. Small dots are interviews: filled for RDI interviews, hollow for past ones. A line means that interview has evidence on that hypothesis. Green lines are mostly for, red mostly against, amber split; thicker lines mean more rows; dashed lines are only weak evidence.</p>
+    <div class="webbox"><svg viewBox="0 0 ${L.W} ${L.H}" class="web" role="img" aria-label="Network of hypotheses and the interviews whose evidence bears on them">${L.loose?`<text class="il" x="${L.loose.x}" y="${L.loose.y}">No evidence yet:</text>`:""}${edges}${nodes}</svg></div>
+    <p class="sub webcap">${cap}</p>
+    <div class="legend"><span class="lg for">Leaning supported</span><span class="lg mixed">Contested</span><span class="lg against">Leaning against</span><span class="lg thin">Too little evidence</span><span class="lg dash">Dashed ring: untested</span></div></section>`}
+function dashView(){
+  const H=cache.hyp;
+  if(!Object.keys(H).length)return `<section><h2>Hypotheses</h2><p class="sub">No hypotheses loaded yet. If this stays empty after a few seconds, reload the page and tell Claude what the “Loaded from the repo” line says.</p></section>`;
+  return `<section>${statusCards(H)}<p class="sub" style="margin-top:8px">Status changes only through the weekly synthesis, which needs two independent sources to call a hypothesis supported. The second row is computed from the evidence rows, so it moves as interviews are processed. Use it to see which status may be due for a change.</p></section>`+web()+strengthList(H)}
+
+/* ideas: one per thesis bullet, scored */
+function scoreDots(s){return `<span class="dots">${[1,2,3].map(i=>`<i class="${i<=s?"on":""}"></i>`).join("")}</span>`}
+function conceptCard(c,ref){
+  const H=cache.hyp;const key="c"+c.id,open=S.res.open[key];
+  const hs=(c.rests_on||[]).map(id=>H[id]).filter(Boolean);
+  const zero=c.scores.some(s=>s.s===0);
+  const verdict=c.total>=20&&!zero?"pursue range":c.total>=20?"deep-dive range":c.total>=12?"park range":"kill range";
+  if(ref)return `<div class="cref">Also tied to <button class="clink" data-goi="${esc(c.id)}">${esc(c.id)}. ${esc(c.title)}</button> · ${c.total}/27</div>`;
+  return `<article class="concept" id="concept-${esc(c.id)}">
+    <div class="chead"><div><span class="letter">${esc(c.id)}</span><b>${esc(c.title)}</b><div class="sub">Combines ${c.merges.map(m=>{const o=(cache.ideas||[]).find(x=>x.id===m);return o?`<a href="${esc(o.file)}" target="_blank" rel="noopener" title="${esc(o.title)}">${esc(m)}</a>`:esc(m)}).join(", ")}</div></div>
+      <div class="total"><b>${c.total}</b><span>/27 · ${verdict}</span><div class="tbar"><i style="width:${(c.total/27*100).toFixed(0)}%"></i><em style="left:${(20/27*100).toFixed(1)}%" title="Pursue threshold: 20"></em></div></div></div>
+    <p class="what">${esc(c.what)}</p>
+    <dl class="facts"><dt>Buyer</dt><dd>${esc(c.buyer)}</dd><dt>User</dt><dd>${esc(c.user)}</dd><dt>Replaces</dt><dd>${esc(c.replaces)}</dd><dt>Price</dt><dd>${esc(c.price)}</dd><dt>First accounts</dt><dd>${esc(c.accounts)}</dd><dt>Two-week test</dt><dd>${esc(c.test)}</dd></dl>
+    <div class="cgrid">
+      <div><h4>Benchmark</h4><table class="rubric">${c.scores.map(s=>`<tr class="${s.s===0?"zero":""}"><td>${esc(s.c)}</td><td>${scoreDots(s.s)}</td><td class="sub">${open?esc(s.basis):""}</td></tr>`).join("")}</table>
+        <button class="clink" data-open="${esc(key)}">${open?"Hide the basis for each score":"Show the basis for each score"}</button></div>
+      <div><h4>Evidence behind it</h4><ul class="rests">${hs.map(h=>{const st=stats(h);return `<li><button class="hlink" data-goh="${esc(h.id)}">${esc(h.id)}</button> ${esc(h.title)}<div class="counts"><span class="pill tone-${LEAN[st.lean].t}">${LEAN[st.lean].l}</span><span class="pos">+${st.fs+st.fw}</span><span class="neg">−${st.as+st.aw}</span></div></li>`}).join("")}</ul>
+        <h4>Kills it</h4><p class="sub">${hlinks(c.kills)}</p></div>
+    </div></article>`}
+function ideasView(){
+  const t=cache.thesis,cs=cache.concepts||[];
+  if(!t)return `<section><p class="sub">Thesis not loaded yet.</p></section>`;
+  const shown=new Set();
+  const blocks=t.bullets.map((b,i)=>{const n=i+1;const mine=cs.filter(c=>(c.thesis||[]).includes(n));
+    const cards=mine.map(c=>{const ref=shown.has(c.id);shown.add(c.id);return conceptCard(c,ref)}).join("")||`<p class="sub">No idea tied to this bullet yet.</p>`;
+    return `<section class="tb"><div class="tbh"><span class="tn">${n}</span><p>${hlinks(b.replace(/\*\*/g,""))}</p></div>${cards}</section>`}).join("");
+  const orig=(cache.ideas||[]).map(o=>`<li><a href="${esc(o.file)}" target="_blank" rel="noopener">${esc(o.id)}</a> ${esc(o.title)} <span class="sub">→ ${esc((cs.find(c=>c.merges.includes(o.id))||{}).id||"not merged")}</span></li>`).join("");
+  const file=cs[0]&&cs[0].file;
+  return `<div class="banner">Proposal for Kat and Ale: the ten ideas combined into five, each tied to the thesis bullet it would prove out. Scores are Claude's first pass against the draft opportunity rubric (0 to 3 on nine criteria; 20 or more with no zero is the draft bar to pursue). Change them in ${file?`<a href="${esc(file)}" target="_blank" rel="noopener">the proposal file</a>`:"the proposal file"}.</div>
+    <section><h2>Thesis ${esc(t.version)}, and the idea each bullet points to</h2><p class="sub"><a href="${esc(t.file)}" target="_blank" rel="noopener">thesis.md</a> is the source and changes through its own PR.</p></section>${blocks}
+    <section><details><summary class="sub">The ten original ideas and where each went</summary><ul class="orig">${orig}</ul></details></section>`}
+function renderResearch(){
+  if(S.tab==="interviews"){renderInterviews();return}
+  renderInsights();
+}
+function loadedLine(){
+  const parts=(S.meta&&S.meta.parts)||[],have=Object.keys(S.snap),missing=parts.filter(p=>!have.includes(p));
+  const n=(x)=>x.toLocaleString();
+  return `<p class="sub">Loaded from the repo: ${n(Object.keys(cache.hyp||{}).length)} hypotheses · ${n((cache.ev||[]).length)} evidence rows · ${n(Object.keys(cache.iv||{}).length)} interviews · ${n((cache.concepts||[]).length)} combined ideas${missing.length?` · <b style="color:var(--s-red-fg)">not loaded: ${esc(missing.join(", "))}</b>`:""}</p>`}
+/* ---------- insights: repo markdown documents ---------- */
+function mdInline(s){
+  let h=esc(s);
+  h=h.replace(/`([^`]+)`/g,"<code>$1</code>");
+  h=h.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  h=h.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,"$1<i>$2</i>");
+  return h}
+const RATE={"High":"r-hi","Some":"r-so","Low":"r-lo","Thin":"r-th","not rated":"r-th"};
+function mdTable(lines){
+  const rows=lines.filter(l=>!/^\|\s*-/.test(l)).map(l=>l.trim().replace(/^\||\|$/g,"").split("|").map(c=>c.trim()));
+  const head=rows[0],body=rows.slice(1);
+  const isFlow=head.slice(1).every(c=>/^\d+$/.test(c));
+  if(isFlow){return `<div class="flow">${body.map(r=>`<div class="flowrow"><div class="flowlabel">${mdInline(r[0])}</div><div class="steps">${r.slice(1).map((c,i)=>`${i?'<span class="arrow">→</span>':""}<span class="step${/^Research/.test(c)?" moved":""}">${mdInline(c)}</span>`).join("")}</div></div>`).join("")}</div>`}
+  const rated=body.some(r=>r.slice(1).some(c=>RATE[c.replace(/\*/g,"")]));
+  return `<div class="mdtable"><table class="${rated?"heat":""}"><thead><tr>${head.map(c=>`<th>${mdInline(c)}</th>`).join("")}</tr></thead><tbody>${body.map(r=>`<tr>${r.map((c,i)=>{const v=c.replace(/\*/g,"");return i===0?`<th scope="row">${mdInline(c)}</th>`:`<td class="${rated?(RATE[v]||""):""}">${mdInline(c)}</td>`}).join("")}</tr>`).join("")}</tbody></table></div>${rated?`<div class="legend"><span class="r-hi">High</span><span class="r-so">Some</span><span class="r-lo">Low</span><span class="r-th">Thin / not rated</span></div>`:""}`}
+function mdRender(md){
+  const lines=md.split("\n");let out="",i=0,openDetails=false,inH2="";
+  const para=[];const flush=()=>{if(para.length){out+=`<p>${mdInline(para.join(" "))}</p>`;para.length=0}};
+  while(i<lines.length){const l=lines[i];
+    if(/^#\s/.test(l)){flush();i++;continue}// the title is shown in the header
+    const h=l.match(/^(#{2,4})\s+(.*)$/);
+    if(h){flush();if(openDetails){out+="</div></details>";openDetails=false}
+      if(h[1]==="##"){inH2=h[2];out+=`<h2>${mdInline(h[2])}</h2>`}
+      else if(h[1]==="###"){out+=`<details class="mdsec"><summary>${mdInline(h[2])}</summary><div>`;openDetails=true}
+      else out+=`<h4>${mdInline(h[2])}</h4>`;i++;continue}
+    if(/^\|/.test(l)){flush();const t=[];while(i<lines.length&&/^\|/.test(lines[i]))t.push(lines[i++]);out+=mdTable(t);continue}
+    const li=l.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+    if(li){flush();const ordered=/\d/.test(li[2]);const items=[];
+      while(i<lines.length){const m=lines[i].match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+        if(m&&(/\d/.test(m[2])===ordered)){items.push(m[3]);i++}
+        else if(lines[i].trim()&&/^\s{2,}\S/.test(lines[i])&&items.length){items[items.length-1]+=" "+lines[i].trim();i++}
+        else break}
+      out+=`<${ordered?"ol":"ul"}>${items.map(x=>`<li>${mdInline(x)}</li>`).join("")}</${ordered?"ol":"ul"}>`;continue}
+    if(!l.trim()){flush();i++;continue}
+    para.push(l.trim());i++}
+  flush();if(openDetails)out+="</div></details>";return out}
+function renderInsights(){
+  const docs=cache.insights||[];const view=S.res.insight||"dash";
+  const short=(t)=>t.replace(/^Industry by product-development stage$/,"Industry × stage");
+  const nav=`<div class="seg">`+`<button data-insight="dash" aria-pressed="${view==="dash"}">Hypotheses</button><button data-insight="ideas" aria-pressed="${view==="ideas"}">Ideas</button>`+docs.map(d=>`<button data-insight="${esc(d.id)}" aria-pressed="${view===d.id}">${esc(short(d.title))}</button>`).join("")+`</div>`;
+  const head=`<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">${nav}</div>${loadedLine()}`;
+  let body;const cur=docs.find(d=>d.id===view);
+  if(!cur)body=view==="ideas"?ideasView():dashView();
+  else body=`<section class="md"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0">${esc(cur.title)}</h2><span class="sub">${esc(cur.status||"")}${cur.owner?" · "+esc(cur.owner):""}${cur.updated?" · updated "+esc(cur.updated):""} · <a href="${esc(cur.file)}" target="_blank" rel="noopener">source file</a></span></div>${mdRender(cur.md)}<p class="sub" style="margin-top:16px">Read-only here. Change it in the repo file, then sync the ledger.</p></section>`;
+  $("resView").innerHTML=`<div style="display:grid;gap:10px">${head}</div>`+body;
+}
+function renderInterviews(){
+  const list=Object.values(cache.iv).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||a.id.localeCompare(b.id));
+  const rdi=list.filter(i=>i.kind==="rdi").length;
+  $("resView").innerHTML=`<section><h2>Interviews</h2><p class="sub">${list.length} processed: ${rdi} RDI interviews and ${list.length-rdi} past interviews. Click one to see its evidence.</p>${list.map(i=>{const key="v"+i.id,open=S.res.open[key];const ev=cache.ev.filter(e=>e.i===i.id);
+    return `<div class="node"><div class="head" data-open="${esc(key)}"><span class="tw">${open?"▾":"▸"}</span><div class="tx"><span class="id">${esc(i.id)}</span>${esc(i.title)}<div class="sub">${i.date?esc(i.date)+" · ":""}${i.rows} evidence rows · <a href="${esc(i.file)}" target="_blank" rel="noopener" data-stop>processed note</a></div></div></div>${open?`<div class="body"><ul class="ev">${ev.map(e=>{const s=(e.links||[]).map(l=>`${l.s==="for"?"+":l.s==="against"?"−":"±"}${l.h}`).join(", ");const cls=(e.links&&e.links[0])?e.links[0].s:"";return `<li class="${cls}${e.weak?" isweak":""}"><div class="src">${esc(e.id)}${s?" · "+esc(s):""} ${flagChips(e)}</div>${esc(e.claim)}</li>`}).join("")}</ul></div>`:""}</div>`}).join("")}</section>`;
+}
+
+/* ---------- shell ---------- */
+function renderTabs(){
+  const n=(c)=>S.loaded?(LEDGERS.includes(c)?rows(c).length:c==="research"?Object.keys(cache.hyp||{}).length:Object.keys(cache.iv||{}).length):"–";
+  $("tabs").innerHTML=LEDGERS.map(k=>`<button role="tab" aria-selected="${k===S.tab}" data-tab="${k}">${F[k].label}<span class="n">${n(k)}</span></button>`).join("")+`<span class="sep"></span>`+
+    `<button role="tab" aria-selected="${S.tab==="insights"}" data-tab="insights">Insights<span class="n">${n("research")} hyp.</span></button><button role="tab" aria-selected="${S.tab==="interviews"}" data-tab="interviews">Interviews<span class="n">${n("interviews")}</span></button>`;
+}
+function renderSync(){
+  if(!S.login)return;const m=S.meta;
+  const when=(d)=>new Date(d).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+  $("sync").classList.remove("bad");
+  $("sync").innerHTML=`<span>Live from GitHub, main${S.loadedAt?" · loaded "+esc(when(S.loadedAt)):""}</span>`+
+    (m?`<span>Dashboard data <a href="https://github.com/${GH.owner}/${GH.repo}/commit/${esc(m.commit)}" target="_blank" rel="noopener">${esc(m.commit)}</a></span>`:"")+
+    `<span>${esc(S.login)}${S.canWrite===false?" · <b>view only</b>":""}</span><button class="clink" id="reload">Reload</button><button class="clink" id="signout">Sign out</button>`;
+}
+function render(){renderTabs();renderSync();const led=LEDGERS.includes(S.tab);$("ledgerView").hidden=!led;$("resView").hidden=led;if(led)renderLedger();else renderResearch()}
+
+/* ---------- drawer ---------- */
+function openDrawer(key){
+  const col=S.tab,C=F[col],isNew=!key;const cols=columns(col).filter(k=>!k.startsWith("_"));
+  const r=isNew?{[C.status]:(C.types[C.status]||[""])[0],owner:col==="crm"||col==="tasks"?(S.f[col]?.owner||""):undefined}:rows(col).find(x=>x._key===key);
+  if(!r)return;S.editing={col,key:isNew?null:key,isNew,base:{...r}};
+  const ro=S.canWrite===false;
+  const input=(k)=>{const t=C.types[k],v=r[k]??"",id="fd_"+k;
+    if(t==="ro")return `<div class="ro">${v?(v.startsWith("http")?`<a href="${esc(v)}" target="_blank" rel="noopener">${esc(shortUrl(v))}</a>`:esc(v)):"—"}</div>`;
+    if(Array.isArray(t)){const options=[{v:"",l:"—"},...t.map(x=>({v:x,l:x})),...(v&&!t.includes(v)?[{v,l:v}]:[])];registerDD(id,options,v,()=>{});return ro?`<div class="ro">${esc(v)||"—"}</div>`:dd(id,v,options,"—")}
+    const link=t==="url"&&v?`<a class="linkout" href="${esc(v)}" target="_blank" rel="noopener">Open ${esc(shortUrl(v))} ↗</a>`:"";
+    return `<input id="${id}" type="${t==="date"?"date":t==="url"?"url":"text"}" value="${esc(v)}" ${ro?"disabled":""}>${link}`};
+  const pend=r._pending?`<div class="note">This row has ${r._pending} edit${r._pending>1?"s":""} saved here and waiting for the next sync to the repo.</div>`:"";
+  const links=col==="crm"&&r._draft?`<div class="note"><a href="${esc(r._draft)}" target="_blank" rel="noopener">Outreach draft ↗</a></div>`:"";
+  const proc=col==="crm"&&r.status==="Interviewed"?`<div class="note">Already interviewed. Keep the status as it is when you write to them again; note the follow-up instead.</div>`:"";
+  $("drawer").innerHTML=`<div class="dhead"><h2>${isNew?"New row":esc(r[C.title]||"Untitled")}</h2><button class="btn" id="dClose">Close</button></div>
+  <div class="dbody">${pend}${links}${proc}${cols.map(k=>`<div class="field"><label for="fd_${k}">${esc(pretty(k))}</label>${input(k)}</div>`).join("")}<div class="note">Saving commits the change to the repo file on GitHub.</div></div>
+  <div class="dfoot"><div id="dDel">${!isNew&&!ro?`<button class="btn danger" id="dDelBtn">Delete</button>`:""}</div><div class="r">${ro?`<span class="sync">View only</span>`:`<button class="btn" id="dCancel">Cancel</button><button class="btn primary" id="dSave">${isNew?"Add":"Save"}</button>`}</div></div>`;
+  $("drawer").hidden=false;$("scrim").hidden=false;
+}
+function closeDrawer(){closeDD();$("drawer").hidden=true;$("scrim").hidden=true;S.editing=null}
+function readForm(){const {col,base}=S.editing,C=F[col],out={};
+  for(const k of columns(col)){if(k.startsWith("_")||C.types[k]==="ro")continue;const t=C.types[k];
+    if(Array.isArray(t)){const conf=DD["fd_"+k];if(conf)out[k]=conf.value||""}else{const el=$("fd_"+k);if(el)out[k]=el.value.trim()}}
+  return out}
+async function save(){
+  const ed=S.editing;if(!ed||!S.login)return;const C=F[ed.col],data=readForm();
+  if(!data[C.title]){toast(`Add a ${pretty(C.title).toLowerCase()} first`);return}
+  const fields={};for(const k in data){if((ed.base[k]??"")!==data[k])fields[k]=data[k]}
+  if(!ed.isNew&&!Object.keys(fields).length){closeDrawer();return}
+  const btn=$("dSave");btn.disabled=true;btn.textContent="Saving…";
+  try{await writeLedger(ed.col,ed.isNew?"new":"set",ed.key,ed.isNew?data:fields);toast(ed.isNew?"Added to GitHub":"Saved to GitHub");closeDrawer()}
+  catch(e){btn.disabled=false;btn.textContent=ed.isNew?"Add":"Save";console.error("save failed",e);
+    toast("Couldn't save: "+e.message);showWhy(e.status===403||e.status===404?`GitHub refused the save (${e.message}): the token needs 'Contents: Read and write' on ${GH.owner}/${GH.repo}.`:`Last save failed: ${e.message}. Nothing was changed; try again or send this line to Kat or Claude.`)}
+}
+async function delYes(){const ed=S.editing;try{await writeLedger(ed.col,"delete",ed.key,{});toast("Removed from GitHub");closeDrawer()}catch(e){toast("Couldn't delete: "+e.message)}}
+
+/* ---------- events ---------- */
+document.addEventListener("click",(ev)=>{
+  const t=ev.target;
+  const ddb=t.closest(".dd>button");if(ddb){ev.preventDefault();const el=ddb.parentElement;if(ddOpen&&ddOpen.el===el)closeDD();else openDD(el);return}
+  const li=t.closest(".dd li, ul.ddmenu li");if(li&&ddOpen){pickDD(+li.dataset.i);return}
+  if(ddOpen&&!t.closest(".dd")&&!t.closest("ul.ddmenu"))closeDD();
+  if(t.closest("[data-stop]"))return;
+  const tab=t.closest("[data-tab]");if(tab){S.tab=tab.dataset.tab;S.statusF="";S.q="";store("tab",S.tab);render();return}
+  const chip=t.closest("[data-status]");if(chip){const v=chip.dataset.status;S.statusF=S.statusF===v?"":v;renderLedger();return}
+  if(t.id==="toggleDone"){S.showDone=!S.showDone;renderLedger();return}
+  if(t.id==="clear"){S.f[S.tab]={};S.statusF="";S.q="";store("f",S.f);renderLedger();return}
+  const th=t.closest("th[data-k]");if(th){const C=F[S.tab],[sk,sd]=S.sort[S.tab]||C.sort,k=th.dataset.k;S.sort[S.tab]=[k,sk===k&&sd==="asc"?"desc":"asc"];renderTable();return}
+  const tr=t.closest("tbody tr[data-key]");if(tr){openDrawer(tr.dataset.key);return}
+  if(t.id==="add"){openDrawer(null);return}
+  if(t.id==="dClose"||t.id==="dCancel"||t.id==="scrim"){closeDrawer();return}
+  if(t.id==="dSave"){save();return}
+  if(t.id==="tokGo"){const v=($("tok").value||"").trim();if(!v)return;TOKEN=v;try{localStorage.setItem("ghtoken",v)}catch(e){}$("sync").textContent="Connecting…";connect();return}
+  if(t.id==="signout"){signOut();return}
+  if(t.id==="reload"){$("sync").textContent="Reloading…";loadAll().catch(e=>showWhy("Couldn't reload: "+e.message));return}
+  if(t.id==="dDelBtn"){$("dDel").innerHTML=`<span class="confirm">Delete for everyone? <button class="btn danger" id="dDelYes">Delete</button><button class="btn" id="dDelNo">Keep</button></span>`;return}
+  if(t.id==="dDelYes"){delYes();return}
+  if(t.id==="dDelNo"){$("dDel").innerHTML=`<button class="btn danger" id="dDelBtn">Delete</button>`;return}
+  const vb=t.closest("[data-view]");if(vb){applyView(S.tab,vb.dataset.view);renderLedger();return}
+  const goh=t.closest("[data-goh]");if(goh){const id=goh.dataset.goh;closeDrawer();S.tab="insights";S.res.insight="dash";S.res.filter="";S.res.open["d:"+id]=true;store("tab",S.tab);render();const el=document.getElementById("hyp-d-"+id);if(el&&el.scrollIntoView)el.scrollIntoView({block:"start"});return}
+  const goi=t.closest("[data-goi]");if(goi){S.tab="insights";S.res.insight="ideas";store("tab",S.tab);render();const el=document.getElementById("concept-"+goi.dataset.goi);if(el&&el.scrollIntoView)el.scrollIntoView({block:"start"});return}
+  const filt=t.closest("[data-filt]");if(filt){const v=filt.dataset.filt;S.res.filter=S.res.filter===v?"":v;renderResearch();return}
+  const sb=t.closest("[data-sortby]");if(sb){S.res.sortBy=sb.dataset.sortby;renderResearch();return}
+  const sl=t.closest("[data-sel]");if(sl){const v=sl.dataset.sel;S.res.sel=S.res.sel===v?"":v;renderResearch();return}
+  const goc=t.closest("[data-goc]");if(goc){S.tab="crm";S.statusF="";S.q="";store("tab",S.tab);render();openDrawer(goc.dataset.goc);return}
+  const cnt=t.closest("[data-evs]");if(cnt){const [h,s]=cnt.dataset.evs.split("|");S.res.ev[h]=S.res.ev[h]===s?null:s;renderResearch();return}
+  const ins=t.closest("[data-insight]");if(ins){S.res.insight=ins.dataset.insight;renderResearch();return}
+  const op=t.closest("[data-open]");if(op){const k=op.dataset.open;S.res.open[k]=!S.res.open[k];renderResearch();return}
+});
+window.addEventListener("scroll",()=>{if(ddOpen&&ddOpen.ul.classList.contains("ddmenu"))closeDD()},true);
+document.addEventListener("keydown",(e)=>{
+  if(ddOpen){const n=ddOpen.conf.options.length;
+    if(e.key==="Escape"){closeDD();e.preventDefault();return}
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){ddOpen.hi=(ddOpen.hi+(e.key==="ArrowDown"?1:-1)+n)%n;[...ddOpen.ul.children].forEach((li,i)=>li.classList.toggle("on",i===ddOpen.hi));ddOpen.ul.children[ddOpen.hi].scrollIntoView({block:"nearest"});e.preventDefault();return}
+    if(e.key==="Enter"&&ddOpen.hi>=0){pickDD(ddOpen.hi);e.preventDefault();return}}
+  if(e.key==="Escape"&&S.editing)closeDrawer();
+  if((e.key==="Enter"||e.key===" ")&&e.target.closest&&e.target.closest("g[data-sel]")){e.preventDefault();e.target.closest("g[data-sel]").dispatchEvent(new MouseEvent("click",{bubbles:true}))}
+});
+
+/* ---------- GitHub: the repo is the store ----------
+   Reads the ledgers live from main and the research snapshot from the
+   tracker-data branch (built by .github/workflows/tracker-data.yml on every
+   merge). Saves go straight to the CSV on main as one commit, rewriting only
+   the edited line. Each person signs in with their own fine-grained token. */
+const GH={owner:"anovoac-lab",repo:"rdi",main:"main",data:"tracker-data"};
+const LEDGER_FILES={crm:["idea-generation/primary-research/outreach/contacts.csv","name"],tasks:["organization/management/tasks.csv","task"],startups:["idea-generation/secondary-research/startups.csv","company"],conferences:["organization/management/conferences.csv","event"]};
+const TOKEN_URL="https://github.com/settings/personal-access-tokens/new";
+let TOKEN="";try{TOKEN=localStorage.getItem("ghtoken")||""}catch(e){}
+async function gh(path,opts={}){
+  const r=await fetch("https://api.github.com"+path,{...opts,cache:"no-store",headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+TOKEN,...(opts.headers||{})}});
+  if(!r.ok){let msg="";try{msg=(await r.json()).message||""}catch(e){}const e=new Error(`${r.status} ${msg}`.trim());e.status=r.status;throw e}
+  return r.status===204?null:r.json()}
+const encPath=(p)=>p.split("/").map(encodeURIComponent).join("/");
+function b64dec(s){const bin=atob(s.replace(/\n/g,""));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new TextDecoder().decode(u)}
+function b64enc(s){const u=new TextEncoder().encode(s);let bin="";for(let i=0;i<u.length;i+=0x8000)bin+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(bin)}
+async function getFile(path,ref){const j=await gh(`/repos/${GH.owner}/${GH.repo}/contents/${encPath(path)}?ref=${encodeURIComponent(ref)}`);return {text:b64dec(j.content||""),sha:j.sha}}
+const repoUrl=(p)=>`https://github.com/${GH.owner}/${GH.repo}/blob/main/${p}`;
+
+/* CSV, matching Python's csv module (minimal quoting, \n line ends) */
+function parseCsvLine(line){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const c=line[i];
+  if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+  else if(c==='"')q=true;else if(c===","){out.push(cur);cur=""}else cur+=c}
+  out.push(cur);return {fields:out,open:q}}
+function csvField(v){v=String(v??"");return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+const csvLine=(header,row)=>header.map(h=>csvField(row[h])).join(",")+"\n";
+// One CSV row per line; a field holding a newline is refused (edit it in the repo).
+function splitCsv(text){
+  const lines=text.split("\n");if(lines[lines.length-1]==="")lines.pop();
+  const header=parseCsvLine(lines[0]).fields,rows=[];
+  for(const l of lines.slice(1)){const p=parseCsvLine(l);if(p.open)throw new Error("a field spans lines; edit that file in the repo");
+    const r={};header.forEach((h,i)=>r[h]=p.fields[i]??"");rows.push(r)}
+  return {header,lines,rows}}
+function slugify(s){return ((s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60))||"row"}
+function rowKey(col,r){const n=(r.notion_url||"").replace(/\/+$/,"").split("/").pop().split("?")[0];
+  if(n.length>=32)return "n"+n.slice(-32);return (col==="tasks"?"t":"")+slugify(r[LEDGER_FILES[col][1]])}
+
+/* loading */
+async function loadLedger(col){
+  const [path]=LEDGER_FILES[col];const {text}=await getFile(path,GH.main);const {header,rows}=splitCsv(text);
+  const drafts=S.drafts||{};
+  rows.forEach(r=>{r._key=rowKey(col,r);if(col==="crm"&&drafts[r.name])r._draft=drafts[r.name]});
+  S.snap[col+"-0"]={col,columns:header,file:repoUrl(path),rows}}
+async function loadResearch(){
+  let list=[];try{list=await gh(`/repos/${GH.owner}/${GH.repo}/contents/snap?ref=${GH.data}`)}catch(e){if(e.status===404){S.dataMissing=true;return}throw e}
+  const docs=await Promise.all(list.filter(f=>f.name.endsWith(".json")).map(async f=>[f.name.slice(0,-5),JSON.parse((await getFile("snap/"+f.name,GH.data)).text)]));
+  for(const [id,d] of docs){if(id==="meta")S.meta=d;else if(!LEDGERS.includes(d.col))S.snap[id]=d;
+    else if(d.col==="crm")d.rows.forEach(r=>{if(r._draft)(S.drafts=S.drafts||{})[r.name]=r._draft})}}
+async function loadAll(){
+  S.snap={};S.drafts={};S.dataMissing=false;
+  await loadResearch();
+  await Promise.all(LEDGERS.map(loadLedger));
+  S.loadedAt=Date.now();S.loaded=true;rebuild();render()}
+
+/* saving: one commit per edit, retried if someone committed in between */
+async function writeLedger(col,op,key,fields){
+  const [path,titleKey]=LEDGER_FILES[col];
+  for(let attempt=0;attempt<3;attempt++){
+    const {text,sha}=await getFile(path,GH.main);const {header,lines,rows}=splitCsv(text);
+    const bad=Object.keys(fields).filter(k=>!header.includes(k));if(bad.length)throw new Error("unknown columns "+bad.join(", "));
+    const idx=rows.map((r,i)=>[rowKey(col,r),i]).filter(([k])=>k===key).map(([,i])=>i);
+    let title;
+    if(op==="new"){const r={};header.forEach(h=>r[h]=fields[h]??"");lines.push(csvLine(header,r).slice(0,-1));title=r[titleKey]}
+    else{if(idx.length!==1)throw new Error(idx.length?"two rows share that name; edit it in the repo":"that row is no longer in the file; reload");
+      const i=idx[0];title=rows[i][titleKey];
+      if(op==="delete")lines.splice(i+1,1);else{Object.assign(rows[i],fields);lines[i+1]=csvLine(header,rows[i]).slice(0,-1)}}
+    const what=op==="delete"?"remove":op==="new"?"add":Object.entries(fields).map(([k,v])=>`${k}=${v||"(empty)"}`).join(", ");
+    const message=`tracker: ${S.login||"someone"} ${op==="set"?"set":what} ${col} "${title}"${op==="set"?": "+what:""}`.slice(0,200);
+    try{await gh(`/repos/${GH.owner}/${GH.repo}/contents/${encPath(path)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,content:b64enc(lines.join("\n")+"\n"),sha,branch:GH.main})});
+      await loadLedger(col);rebuild();render();return}
+    catch(e){if((e.status===409||e.status===422)&&attempt<2)continue;throw e}}}
+
+/* sign-in */
+function signInPanel(msg){
+  const b=$("banner");b.hidden=false;b.className="banner signin";
+  b.innerHTML=`<b>Sign in with GitHub</b>${msg?`<p class="why">${esc(msg)}</p>`:""}
+  <p>The Tracker reads and saves the repo's files directly, so it needs a GitHub token that can read and write <code>${GH.owner}/${GH.repo}</code>. It stays in this browser only.</p>
+  <ol><li><a href="${TOKEN_URL}" target="_blank" rel="noopener">Create a fine-grained token</a>: resource owner <b>${GH.owner}</b>, only the <b>${GH.repo}</b> repository, permission <b>Contents: Read and write</b>.</li>
+  <li>Paste it here.</li></ol>
+  <div class="tokrow"><input id="tok" type="password" placeholder="github_pat_…" aria-label="GitHub token" autocomplete="off"><button class="btn primary" id="tokGo">Connect</button></div>`}
+async function connect(){
+  try{const u=await gh("/user");S.login=u.login;
+    const repo=await gh(`/repos/${GH.owner}/${GH.repo}`);S.canWrite=!!(repo.permissions&&repo.permissions.push);
+    $("banner").hidden=true;$("banner").className="banner";
+    await loadAll();
+    if(S.dataMissing)showWhy("The hypotheses and dashboard data haven't been built yet: run the 'Tracker data' GitHub Action once, then reload.");
+    else if(!S.canWrite)showWhy("This token can read the repo but not save to it. Give it 'Contents: Read and write' to edit.");}
+  catch(e){if(e.status===401||e.status===403||e.status===404){try{localStorage.removeItem("ghtoken")}catch(_){}TOKEN="";signInPanel(e.status===401?"That token didn't work. Check it was copied whole and hasn't expired.":e.status===404?`This token can't see ${GH.owner}/${GH.repo}. Pick that repository when creating it; Ale may need to approve it for the organization.`:"GitHub refused the token ("+e.message+").")}
+    else{$("sync").textContent="Couldn't reach GitHub: "+e.message;$("sync").classList.add("bad")}}}
+function signOut(){try{localStorage.removeItem("ghtoken")}catch(e){}TOKEN="";S.login="";S.snap={};S.meta=null;S.loaded=false;rebuild();render();signInPanel()}
+
+/* ---------- boot ---------- */
+S.tab=recall("tab","crm");if(S.tab==="research")S.tab="insights";if(![...LEDGERS,...RES].includes(S.tab))S.tab="crm";
+S.f=recall("f",{});S.view={};S.group={};S.snap={};
+rebuild();render();
+if(TOKEN)connect();else{$("sync").textContent="Not signed in";signInPanel()}
+// Reload when the tab comes back after a while, so the view stays current.
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&TOKEN&&S.loadedAt&&Date.now()-S.loadedAt>120000&&!S.editing)loadAll().catch(()=>{})});
+function showWhy(msg){const b=$("banner");b.hidden=false;b.className="banner";b.textContent=msg}
+</script>
