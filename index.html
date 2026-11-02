@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RDI Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -26,6 +30,8 @@
   --s-green:#173325; --s-green-fg:#8fd6ac; --s-red:#3d1d1a; --s-red-fg:#f0a39b; --s-violet:#2b2340; --s-violet-fg:#c4b1ee; --s-pink:#3a1f2e; --s-pink-fg:#eeaacb;
   color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
+aside.drawer[hidden],.banner[hidden],.toast[hidden],.scrim[hidden]{display:none}
 body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--f-body);margin:0}
 .wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:18px 48px;display:flex;flex-direction:column;gap:14px}
 header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -432,7 +438,7 @@ function renderTable(){
     $("tbody").innerHTML=keys.map(k=>`<tr class="grp"><td colspan="${C.cols.length}">${g==="tests"&&cache.hyp[k]?`<button class="hlink" data-goh="${esc(k)}">${esc(k)}</button> `:""}${esc(g==="tests"&&cache.hyp[k]?cache.hyp[k].title:label(k))} <span class="n">${groups[k].length}</span></td></tr>`+groups[k].map(rowHtml).join("")).join("");
   }else $("tbody").innerHTML=rs.map(rowHtml).join("");
   const e=$("empty"),all=rows(col).length;
-  if(!S.loaded){e.hidden=false;e.innerHTML=`<strong>Loading ${esc(C.label)}…</strong>Rows appear as soon as the shared ledger answers.`}
+  if(!S.loaded){e.hidden=false;e.innerHTML=S.login?`<strong>Loading ${esc(C.label)}…</strong>Reading the repo on GitHub.`:`<strong>Sign in to see ${esc(C.label)}</strong>Paste your GitHub token above.`}
   else if(!all){e.hidden=false;e.innerHTML=`<strong>No ${esc(C.label.toLowerCase())} yet</strong>Use “Add row”. It goes to the repo on the next sync.`}
   else if(!rs.length){e.hidden=false;e.innerHTML=`<strong>Nothing matches</strong>Clear the search or filters to see all ${all} rows.`}
   else e.hidden=true;
