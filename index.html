@@ -752,6 +752,7 @@ document.addEventListener("keydown",(e)=>{
     if(e.key==="ArrowDown"||e.key==="ArrowUp"){ddOpen.hi=(ddOpen.hi+(e.key==="ArrowDown"?1:-1)+n)%n;[...ddOpen.ul.children].forEach((li,i)=>li.classList.toggle("on",i===ddOpen.hi));ddOpen.ul.children[ddOpen.hi].scrollIntoView({block:"nearest"});e.preventDefault();return}
     if(e.key==="Enter"&&ddOpen.hi>=0){pickDD(ddOpen.hi);e.preventDefault();return}}
   if(e.key==="Escape"&&S.editing)closeDrawer();
+  if(e.key==="Enter"&&e.target&&e.target.id==="tok"){e.preventDefault();$("tokGo").click()}
   if((e.key==="Enter"||e.key===" ")&&e.target.closest&&e.target.closest("g[data-sel]")){e.preventDefault();e.target.closest("g[data-sel]").dispatchEvent(new MouseEvent("click",{bubbles:true}))}
 });
 
