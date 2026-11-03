@@ -708,7 +708,7 @@ async function save(){
   const btn=$("dSave");btn.disabled=true;btn.textContent="Saving…";
   try{await writeLedger(ed.col,ed.isNew?"new":"set",ed.key,ed.isNew?data:fields);toast(ed.isNew?"Added to GitHub":"Saved to GitHub");closeDrawer()}
   catch(e){btn.disabled=false;btn.textContent=ed.isNew?"Add":"Save";console.error("save failed",e);
-    toast("Couldn't save: "+e.message);showWhy(e.status===403||e.status===404?`GitHub refused the save (${e.message}): the token needs 'Contents: Read and write' on ${GH.owner}/${GH.repo}.`:`Last save failed: ${e.message}. Nothing was changed; try again or send this line to Kat or Claude.`)}
+    toast("Couldn't save: "+e.message);showWhy(e.status===403||e.status===404?`GitHub refused the save (${e.message}): the token needs the repo scope, and your account needs write access to ${GH.owner}/${GH.repo}.`:`Last save failed: ${e.message}. Nothing was changed; try again or send this line to Kat or Claude.`)}
 }
 async function delYes(){const ed=S.editing;try{await writeLedger(ed.col,"delete",ed.key,{});toast("Removed from GitHub");closeDrawer()}catch(e){toast("Couldn't delete: "+e.message)}}
 
@@ -762,7 +762,7 @@ document.addEventListener("keydown",(e)=>{
    the edited line. Each person signs in with their own fine-grained token. */
 const GH={owner:"anovoac-lab",repo:"rdi",main:"main",data:"tracker-data"};
 const LEDGER_FILES={crm:["idea-generation/primary-research/outreach/contacts.csv","name"],tasks:["organization/management/tasks.csv","task"],startups:["idea-generation/secondary-research/startups.csv","company"],conferences:["organization/management/conferences.csv","event"]};
-const TOKEN_URL="https://github.com/settings/personal-access-tokens/new";
+const TOKEN_URL="https://github.com/settings/tokens/new?scopes=repo&description=RDI%20Tracker";
 let TOKEN="";try{TOKEN=localStorage.getItem("ghtoken")||""}catch(e){}
 async function gh(path,opts={}){
   const r=await fetch("https://api.github.com"+path,{...opts,cache:"no-store",headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+TOKEN,...(opts.headers||{})}});
@@ -832,7 +832,7 @@ function signInPanel(msg){
   const b=$("banner");b.hidden=false;b.className="banner signin";
   b.innerHTML=`<b>Sign in with GitHub</b>${msg?`<p class="why">${esc(msg)}</p>`:""}
   <p>The Tracker reads and saves the repo's files directly, so it needs a GitHub token that can read and write <code>${GH.owner}/${GH.repo}</code>. It stays in this browser only.</p>
-  <ol><li><a href="${TOKEN_URL}" target="_blank" rel="noopener">Create a fine-grained token</a>: resource owner <b>${GH.owner}</b>, only the <b>${GH.repo}</b> repository, permission <b>Contents: Read and write</b>.</li>
+  <ol><li><a href="${TOKEN_URL}" target="_blank" rel="noopener">Create a classic token</a> with the <b>repo</b> scope (the link ticks it), and an expiration that covers the quarter. Fine-grained tokens don't work here: <b>${GH.owner}</b> is a personal account, not an organization.</li>
   <li>Paste it here.</li></ol>
   <div class="tokrow"><input id="tok" type="password" placeholder="github_pat_…" aria-label="GitHub token" autocomplete="off"><button class="btn primary" id="tokGo">Connect</button></div>`}
 async function connect(){
@@ -841,8 +841,8 @@ async function connect(){
     $("banner").hidden=true;$("banner").className="banner";
     await loadAll();
     if(S.dataMissing)showWhy("The hypotheses and dashboard data haven't been built yet: run the 'Tracker data' GitHub Action once, then reload.");
-    else if(!S.canWrite)showWhy("This token can read the repo but not save to it. Give it 'Contents: Read and write' to edit.");}
-  catch(e){if(e.status===401||e.status===403||e.status===404){try{localStorage.removeItem("ghtoken")}catch(_){}TOKEN="";signInPanel(e.status===401?"That token didn't work. Check it was copied whole and hasn't expired.":e.status===404?`This token can't see ${GH.owner}/${GH.repo}. Pick that repository when creating it; Ale may need to approve it for the organization.`:"GitHub refused the token ("+e.message+").")}
+    else if(!S.canWrite)showWhy("This token can read the repo but not save to it: your account needs write access to it.");}
+  catch(e){if(e.status===401||e.status===403||e.status===404){try{localStorage.removeItem("ghtoken")}catch(_){}TOKEN="";signInPanel(e.status===401?"That token didn't work. Check it was copied whole and hasn't expired.":e.status===404?`This token can't see ${GH.owner}/${GH.repo}. Use a classic token with the repo scope, from an account that is a collaborator on the repo.`:"GitHub refused the token ("+e.message+").")}
     else{$("sync").textContent="Couldn't reach GitHub: "+e.message;$("sync").classList.add("bad")}}}
 function signOut(){try{localStorage.removeItem("ghtoken")}catch(e){}TOKEN="";S.login="";S.snap={};S.meta=null;S.loaded=false;rebuild();render();signInPanel()}
 
